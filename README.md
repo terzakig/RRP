@@ -1,2 +1,2 @@
-# RRIP
-RRIP: Rational regression &amp; interpolation of pose
+# RRP
+RRP: Rational Regression &amp; interpolation of Pose
