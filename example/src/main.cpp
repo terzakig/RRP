@@ -31,14 +31,14 @@ int main()
         mini::Vector<double, 2> prediction = rat_pure_regression.Value(theta);
 
         std::cout << " y(" << theta << ") = " << gt << " and prediction  f(" << theta << ") = "
-                  << prediction << " (error: " << mini::Norm2((prediction - gt)) << std::endl;
+                  << prediction << "\nerror: " << mini::Norm2((prediction - gt)) << std::endl;
     }
 
     // B. Test regression with 3 fixed points
     ratfit::RationalFitter<2> rat_regression_interp(                                                              //
         std::vector<double>{angles[0], angles[1], angles[2], angles[3], angles[4], angles[5]},                    //
         std::vector<mini::Vector<double, 2>>({points[0], points[1], points[2], points[3], points[4], points[5]}), //
-        std::vector<size_t>({0, 1, 4}),                                                                           // no indexes fixed
+        std::vector<size_t>({0, 4, 5}),                                                                           // no indexes fixed
         std::vector<double>({1, 1, 1, 1, 1, 1}));
 
     std::cout << "REGRESSION WITH FIXED POINTS\n=======================\n";
@@ -49,7 +49,7 @@ int main()
         mini::Vector<double, 2> prediction = rat_regression_interp.Value(theta);
 
         std::cout << " y(" << theta << ") = " << gt << " and prediction  f(" << theta << ") = "
-                  << prediction << " (error: " << mini::Norm2((prediction - gt)) << std::endl;
+                  << prediction << "\nerror: " << mini::Norm2((prediction - gt)) << std::endl;
     }
 
     return 0;

@@ -127,9 +127,6 @@ namespace ratfit
                     Es[d](r, 1) = y * (Ds[d](r, 1) = dt);
                     Es[d](r, 2) = y * (Ds[d](r, 2) = dt * dt);
                 }
-                if (d == 0)
-                    std::cout << " E[0] = " << std::endl
-                              << Es[d] << std::endl;
                 // Null space N is empty and D is full rank (3) because the constraints are >=3.
                 // Thus, A_hat, B_hat are zero (because N = 0)
                 // mini::Matrix<double, 3, 3> A_hat; // A_hat = N'*A*N
@@ -161,6 +158,7 @@ namespace ratfit
                     exit(-1);
                 }
 
+                /*
                 if (eigenvalues.size() < 2 && //
                     eigenvectors[0][1] * eigenvectors[0][1] - 4 * eigenvectors[0][0] * eigenvectors[0][2] >= 0)
                 {
@@ -203,6 +201,7 @@ namespace ratfit
                     F = Binv * Cs[d];
                     std::cout << " EIGENVALUES FOUND: " << eigenvalues.size() << std::endl;
                 }
+                */
                 // Find the suitable eigenvalue-eigenvector
                 min_error = std::numeric_limits<double>::max(); // probably not necessary
                 for (size_t i = 0; i < eigenvalues.size(); i++)
