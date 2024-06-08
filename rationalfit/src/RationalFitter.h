@@ -43,31 +43,15 @@ namespace ratfit
                 ((!weights.empty() && weights.size() == data.size()) || weights.empty()) && //
                 fixed_point_indexes.size() < 4);
 
-            std::vector<Pw> new_weights;
-            if (weights.empty())
-            {
-                new_weights.resize(data.size(), static_cast<Pw>(1.0));
-            }
-            else
-            {
-                new_weights = weights;
-            }
-
             // Check what optimization to run (with/without fixed points)
-            if (fixed_point_indexes.size() < 3)
+            if (fixed_point_indexes.empty())
             {
-                if (!fixed_point_indexes.empty())
-                {
-                    for (size_t i = 0; i < fixed_point_indexes.size(); i++)
-                    {
-                        new_weights[fixed_point_indexes[i]] = LARGE_WEIGHT;
-                    }
-                }
-                InitSimpleRegression(time_instances, data, new_weights);
+
+                InitSimpleRegression(time_instances, data, weights);
             }
             else
             {
-                InitRegressionWithFixedPoints(time_instances, data, fixed_point_indexes, new_weights);
+                InitRegressionWithFixedPoints(time_instances, data, fixed_point_indexes, weights);
             }
         }
 
@@ -84,11 +68,6 @@ namespace ratfit
             std::array<mini::Matrix<double, 3, 3>, data_dim> Bs;
             // Sum(y*c*c')
             std::array<mini::Matrix<double, 3, 3>, data_dim> Cs;
-
-            // The constraint matrix D = [tau_{j1}'; tau_{j2}'; tau_{j3}'; tau_{j4}']
-            std::array<mini::Matrix<double, 4, 3>, data_dim> Ds;
-            // The constraint matrix E = [y_{j1}*tau_{j1}'; y_{j2}*tau_{j2}'; tau_{j3}'; tau_{j4}']
-            std::array<mini::Matrix<double, 4, 3>, data_dim> Es;
 
             // Time base
             time_base_ = time_instances[0];
@@ -118,118 +97,371 @@ namespace ratfit
                     Cs[d] += (w * y) * G;
                 }
 
-                for (size_t r = 0; r < fixed_point_indexes.size(); r++)
-                {
-                    const size_t index = fixed_point_indexes[r];
-                    const double dt = (time_instances[index] - time_base_) * scale_;
-                    const double y = data[index][d];
-                    Es[d](r, 0) = y * (Ds[d](r, 0) = 1);
-                    Es[d](r, 1) = y * (Ds[d](r, 1) = dt);
-                    Es[d](r, 2) = y * (Ds[d](r, 2) = dt * dt);
-                }
-                // Null space N is empty and D is full rank (3) because the constraints are >=3.
-                // Thus, A_hat, B_hat are zero (because N = 0)
-                // mini::Matrix<double, 3, 3> A_hat; // A_hat = N'*A*N
-                // mini::Matrix<double, 3, 3> B_hat; // B_hat = N'*(B - A*H*F)
-                // Fix the size of D to 3x4 (Since we are dealing with 3 or 4 fixed points, rank(D) = 3 and H = I3x4 and is skipped...)
-                mini::Matrix<double, 3, 3> DtD = Ds[d].t() * Ds[d];
-                mini::Matrix<double, 3, 3> DtDinv;
-                InvertSPD3x3(DtD, DtDinv);
-                mini::Matrix<double, 3, 3> F = DtDinv * Ds[d].t() * Es[d];
+                // Use eqs. (14), (15), (16) in paper.
+                // A_hat = N'*A*N
+                // B_hat = N'*(B - A*H*F)
+                // C_hat = F*(H'*A*H*F + C-2*H'*B).
 
-                mini::Matrix<double, 3, 3> C_hat; // C_hat = F*(H'*A*H*F + C-2*H'*B). For H = I3x4, X_hat = F'*A*F + C - 2*F'*B
-                C_hat = F.t() * (As[d] * F - 2 * Bs[d]) + Cs[d];
-                C_hat = 0.5 * (C_hat + C_hat.t());
-                // Qp = inv(K)*C_hat
-                mini::Matrix<double, 3, 3> Qp({
-                    //
-                    -0.5 * C_hat(2, 0), -0.5 * C_hat(2, 1), -0.5 * C_hat(2, 2), //
-                    C_hat(1, 0), C_hat(1, 1), C_hat(1, 2),                      //
-                    -0.5 * C_hat(0, 0), -0.5 * C_hat(0, 1), -0.5 * C_hat(0, 2)  //
-                });
-
-                auto eigen_decomposition = Eigen34::EigenDecompose3x3(Qp.DataPtr());
-                std::vector<double> eigenvalues = eigen_decomposition.first;
-                std::vector<std::vector<double>> eigenvectors = eigen_decomposition.second;
-                double min_error = std::numeric_limits<double>::max(); // probably not necessary
-                if (eigenvalues.empty())
+                // Take cases on the number of fixed points
+                if (fixed_point_indexes.size() == 1)
                 {
-                    std::cerr << " NO EIGENVALUES!!!!!!!  NO EIGENVALUES!!!!!!! NO EIGENVALUES!!!!!!! \n";
-                    exit(-1);
-                }
-
-                /*
-                if (eigenvalues.size() < 2 && //
-                    eigenvectors[0][1] * eigenvectors[0][1] - 4 * eigenvectors[0][0] * eigenvectors[0][2] >= 0)
-                {
-                    std::cout << " USING LARGE WEIGHt!\n";
-                    // Add large weights in A, B, C and try to approximate the constraint with LS
+                    std::cout << "points fixed 1!!!\n";
+                    // Fill constraint matrices E and D
+                    mini::Matrix<double, 1, 3> D;
+                    mini::Matrix<double, 1, 3> E;
                     for (size_t r = 0; r < fixed_point_indexes.size(); r++)
                     {
                         const size_t index = fixed_point_indexes[r];
                         const double dt = (time_instances[index] - time_base_) * scale_;
-                        const double dt2 = dt * dt;
-                        const double dt3 = dt2 * dt;
-                        const double dt4 = dt3 * dt;
-
                         const double y = data[index][d];
-
-                        const mini::Matrix<double, 3, 3> G({
-                            1, dt, dt2,   //
-                            dt, dt2, dt3, //
-                            dt2, dt3, dt4 //
-                        });
-                        const double w = LARGE_WEIGHT;
-                        As[d] += (w * y * y) * G;
-                        Bs[d] += w * G;
-                        Cs[d] += (w * y) * G;
+                        E(r, 0) = y * (D(r, 0) = 1);
+                        E(r, 1) = y * (D(r, 1) = dt);
+                        E(r, 2) = y * (D(r, 2) = dt * dt);
                     }
+                    // A. Null space is 2D and row space is 1D
+                    mini::Vector<double, 3> u1 = D.GetRow(0);
+                    u1 = mini::Normalize(u1);
+                    mini::Matrix<double, 3, 1> H = u1;
 
-                    mini::Matrix<double, 3, 3> Binv;
-                    InvertSPD3x3(Bs[d], Binv);
-                    mini::Matrix<double, 3, 3> Q1;
-                    Q1 = As[d] - Cs[d] * Binv * Cs[d];
-                    //  Qp = iK*Q;
-                    mini::Matrix<double, 3, 3> Q1p({                                                      //
-                                                    -0.5 * Q1p(2, 0), -0.5 * Q1p(2, 1), -0.5 * Q1p(2, 2), //
-                                                    Q1p(1, 0), Q1p(1, 1), Q1p(1, 2),                      //
-                                                    -0.5 * Q1p(0, 0), -0.5 * Q1p(0, 1), -0.5 * Q1p(0, 2)});
-                    eigen_decomposition = Eigen34::EigenDecompose3x3(Q1p.DataPtr());
-                    eigenvalues = eigen_decomposition.first;
-                    eigenvectors = eigen_decomposition.second;
-                    // Switch to the classic F
-                    F = Binv * Cs[d];
-                    std::cout << " EIGENVALUES FOUND: " << eigenvalues.size() << std::endl;
-                }
-                */
-                // Find the suitable eigenvalue-eigenvector
-                min_error = std::numeric_limits<double>::max(); // probably not necessary
-                for (size_t i = 0; i < eigenvalues.size(); i++)
-                {
-                    mini::Vector<double, 3> b({eigenvectors[i][0], eigenvectors[i][1], eigenvectors[i][2]});
-                    std::cout << " b for d = " << d << std::endl
-                              << ": " << b << std::endl;
-                    b = (1 / mini::Norm2(b)) * b;
-                    const double Delta = b[1] * b[1] - 4 * b[2] * b[0];
-                    std::cout << " Delta " << Delta << std::endl;
-
-                    if (Delta < 0 || eigenvalues.size() == 1)
+                    // B. Row space is a 2D basis of the orthogonal space of u1
+                    if (u1[2] < 0)
                     {
-                        const double error = Dotp(b, C_hat * b);
-                        if (min_error > error)
+                        u1 = (-1) * u1;
+                    }
+                    // Obtain a basis of the orth. space of u1 as per. https://link.springer.com/article/10.1007/s10851-017-0765-x
+                    mini::Matrix<double, 3, 2> N;
+                    const double one_plus_rho = 1 + u1[2];
+                    N(0, 0) = one_plus_rho - u1[0] * u1[0];
+                    N(0, 1) = -u1[0] * u1[1];
+                    N(1, 0) = -u1[1] * u1[0];
+                    N(1, 1) = one_plus_rho - u1[1] * u1[1];
+                    N(2, 0) = -one_plus_rho * u1[0];
+                    N(2, 1) = -one_plus_rho * u1[1];
+
+                    // Compute F
+                    const double HtDtDH = mini::Dotp(H, D.t() * D * H);
+                    mini::Matrix<double, 1, 3> F = (1.0 / HtDtDH) * mini::Dotp(D.GetRow(0), H) * E;
+
+                    // Compute A, B, C hats
+                    mini::Matrix<double, 2, 2> A_hat = N.t() * As[d] * N;
+                    mini::Matrix<double, 2, 3> B_hat = N.t() * (Bs[d] - As[d] * H * F);
+                    mini::Matrix<double, 3, 3> C_hat = (H * F).t() * As[d] * H * F + Cs[d] - 2 * (H * F).t() * Bs[d];
+
+                    // Get the suymmetric part of C_hat to be n the safe side
+                    C_hat = 0.5 * (C_hat + C_hat.t());
+
+                    // Finally, the eigenvector matrix, Q
+                    mini::Matrix<double, 2, 2> A_hatinv;
+                    mini::Invert2x2(A_hat, A_hatinv);
+                    mini::Matrix<double, 3, 3> Q = C_hat - B_hat.t() * A_hatinv * B_hat;
+
+                    // The Qp = inv(K)*Q
+                    // Qp = inv(K)*(symmetric(C_hat) - B_hat*
+                    mini::Matrix<double, 3, 3> Qp({
+                        //
+                        -0.5 * Q(2, 0), -0.5 * Q(2, 1), -0.5 * Q(2, 2), //
+                        Q(1, 0), Q(1, 1), Q(1, 2),                      //
+                        -0.5 * Q(0, 0), -0.5 * Q(0, 1), -0.5 * Q(0, 2)  //
+                    });
+
+                    auto eigen_decomposition = Eigen34::EigenDecompose3x3(Qp.DataPtr());
+                    std::vector<double> eigenvalues = eigen_decomposition.first;
+                    std::vector<std::vector<double>> eigenvectors = eigen_decomposition.second;
+                    double min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    if (eigenvalues.empty())
+                    {
+                        std::cerr << " NO EIGENVALUES!!!!!!!  NO EIGENVALUES!!!!!!! NO EIGENVALUES!!!!!!! \n";
+                        exit(-1);
+                    }
+                    // Find the suitable eigenvalue-eigenvector
+                    min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    for (size_t i = 0; i < eigenvalues.size(); i++)
+                    {
+                        mini::Vector<double, 3> b({eigenvectors[i][0], eigenvectors[i][1], eigenvectors[i][2]});
+                        // std::cout << " b for d = " << d << std::endl
+                        //           << ": " << b << std::endl;
+                        b = (1 / mini::Norm2(b)) * b;
+                        const double Delta = b[1] * b[1] - 4 * b[2] * b[0];
+                        // std::cout << " Delta " << Delta << std::endl;
+
+                        if (Delta < 0 || eigenvalues.size() == 1)
                         {
-                            min_error = error;
-                            denominators_[d] = b;
+                            const double error = Dotp(b, C_hat * b);
+                            if (min_error > error)
+                            {
+                                min_error = error;
+                                denominators_[d] = b;
+                            }
                         }
                     }
-                }
 
-                // Store solutions
-                numerators_[d] = F * denominators_[d];
-                if (eigenvalues.size() == 1)
+                    // Store solutions
+                    numerators_[d] = N * (A_hatinv * B_hat * denominators_[d]) + H * (F * denominators_[d]);
+                    if (eigenvalues.size() == 1)
+                    {
+                        std::cout << " numerator = " << F * denominators_[d] << std::endl;
+                        std::cout << " denominaor = " << F * denominators_[d] << std::endl;
+                    }
+                }
+                else if (fixed_point_indexes.size() == 2)
                 {
-                    std::cout << " numerator = " << F * denominators_[d] << std::endl;
-                    std::cout << " denominaor = " << F * denominators_[d] << std::endl;
+                    // Fill constraint matrices E and D
+                    mini::Matrix<double, 2, 3> D;
+                    mini::Matrix<double, 2, 3> E;
+                    for (size_t r = 0; r < fixed_point_indexes.size(); r++)
+                    {
+                        const size_t index = fixed_point_indexes[r];
+                        const double dt = (time_instances[index] - time_base_) * scale_;
+                        const double y = data[index][d];
+                        E(r, 0) = y * (D(r, 0) = 1);
+                        E(r, 1) = y * (D(r, 1) = dt);
+                        E(r, 2) = y * (D(r, 2) = dt * dt);
+                    }
+
+                    // A. The row space is no simply the two rows of D
+                    mini::Vector<double, 3> u1 = D.GetRow(0);
+                    mini::Vector<double, 3> u2 = D.GetRow(1);
+                    // Orthogonalize for numerical accuracy
+                    u1 = mini::Normalize(u1);
+                    u2 = u2 - mini::Dotp(u1, u2) * u1;
+                    u2 = mini::Normalize(u2);
+
+                    mini::Matrix<double, 3, 2> H;
+                    H(0, 0) = u1[0];
+                    H(1, 0) = u1[1];
+                    H(2, 0) = u1[2];
+
+                    H(0, 1) = u2[0];
+                    H(1, 1) = u2[1];
+                    H(2, 1) = u2[2];
+
+                    // Obtain the null vector as the cross product of the row space vectors
+                    mini::Vector<double, 3> N = mini::Cross(u1, u2);
+
+                    // Compute F
+                    mini::Matrix<double, 2, 2> HtDtDH = H.t() * D.t() * D * H;
+                    mini::Matrix<double, 2, 2> HtDtDHinv;
+                    mini::Invert2x2(HtDtDH, HtDtDHinv);
+                    mini::Matrix<double, 2, 3> F = HtDtDHinv * (D * H).t() * E;
+
+                    // Compute A, B, C hats
+                    const double A_hat = mini::Dotp(N, As[d] * N);
+                    mini::Matrix<double, 1, 3> B_hat = N.t() * (Bs[d] - As[d] * H * F);
+                    mini::Matrix<double, 3, 3> C_hat = (H * F).t() * As[d] * H * F + Cs[d] - 2 * (H * F).t() * Bs[d];
+
+                    // Get the suymmetric part of C_hat to be n the safe side
+                    C_hat = 0.5 * (C_hat + C_hat.t());
+
+                    // Finally, the eigenvector matrix, Q
+                    mini::Matrix<double, 3, 3> Q = C_hat - (1.0 / A_hat) * B_hat.t() * B_hat;
+
+                    // The Qp = inv(K)*Q
+                    // Qp = inv(K)*(symmetric(C_hat) - B_hat*
+                    mini::Matrix<double, 3, 3> Qp({
+                        //
+                        -0.5 * Q(2, 0), -0.5 * Q(2, 1), -0.5 * Q(2, 2), //
+                        Q(1, 0), Q(1, 1), Q(1, 2),                      //
+                        -0.5 * Q(0, 0), -0.5 * Q(0, 1), -0.5 * Q(0, 2)  //
+                    });
+
+                    auto eigen_decomposition = Eigen34::EigenDecompose3x3(Qp.DataPtr());
+                    std::vector<double> eigenvalues = eigen_decomposition.first;
+                    std::vector<std::vector<double>> eigenvectors = eigen_decomposition.second;
+                    double min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    if (eigenvalues.empty())
+                    {
+                        std::cerr << " NO EIGENVALUES!!!!!!!  NO EIGENVALUES!!!!!!! NO EIGENVALUES!!!!!!! \n";
+                        exit(-1);
+                    }
+                    // Find the suitable eigenvalue-eigenvector
+                    min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    for (size_t i = 0; i < eigenvalues.size(); i++)
+                    {
+                        mini::Vector<double, 3> b({eigenvectors[i][0], eigenvectors[i][1], eigenvectors[i][2]});
+                        // std::cout << " b for d = " << d << std::endl
+                        //           << ": " << b << std::endl;
+                        b = (1 / mini::Norm2(b)) * b;
+                        const double Delta = b[1] * b[1] - 4 * b[2] * b[0];
+                        // std::cout << " Delta " << Delta << std::endl;
+
+                        if (Delta < 0 || eigenvalues.size() == 1)
+                        {
+                            const double error = Dotp(b, C_hat * b);
+                            if (min_error > error)
+                            {
+                                min_error = error;
+                                denominators_[d] = b;
+                            }
+                        }
+                    }
+
+                    // Store solutions
+                    numerators_[d] = N * ((1.0 / A_hat) * B_hat * denominators_[d]) + (H * F * denominators_[d]);
+                    if (eigenvalues.size() == 1)
+                    {
+                        std::cout << " numerator = " << F * denominators_[d] << std::endl;
+                        std::cout << " denominaor = " << F * denominators_[d] << std::endl;
+                    }
+                }
+                else if (fixed_point_indexes.size() == 3)
+                {
+                    // Fill constraint matrices E and D
+                    mini::Matrix<double, 3, 3> D;
+                    mini::Matrix<double, 3, 3> E;
+                    for (size_t r = 0; r < fixed_point_indexes.size(); r++)
+                    {
+                        const size_t index = fixed_point_indexes[r];
+                        const double dt = (time_instances[index] - time_base_) * scale_;
+                        const double y = data[index][d];
+                        E(r, 0) = y * (D(r, 0) = 1);
+                        E(r, 1) = y * (D(r, 1) = dt);
+                        E(r, 2) = y * (D(r, 2) = dt * dt);
+                    }
+
+                    mini::Matrix<double, 3, 3> H = mini::Matrix<double, 3, 3>::eye();
+
+                    // Compute F
+                    mini::Matrix<double, 3, 3> HtDtDH = H.t() * D.t() * D * H;
+                    mini::Matrix<double, 3, 3> HtDtDHinv;
+                    InvertSPD3x3(HtDtDH, HtDtDHinv);
+                    mini::Matrix<double, 3, 3> F = HtDtDHinv * (D * H).t() * E;
+
+                    // No A, B hats this time...
+                    mini::Matrix<double, 3, 3> C_hat = (H * F).t() * As[d] * H * F + Cs[d] - 2 * (H * F).t() * Bs[d];
+
+                    // Get the symmetric part of C_hat to be n the safe side
+                    C_hat = 0.5 * (C_hat + C_hat.t());
+
+                    // Finally, the eigenvector matrix, Q
+                    mini::Matrix<double, 3, 3> Q = C_hat;
+
+                    // The Qp = inv(K)*Q
+                    // Qp = inv(K)*(symmetric(C_hat) - B_hat*
+                    mini::Matrix<double, 3, 3> Qp({
+                        //
+                        -0.5 * Q(2, 0), -0.5 * Q(2, 1), -0.5 * Q(2, 2), //
+                        Q(1, 0), Q(1, 1), Q(1, 2),                      //
+                        -0.5 * Q(0, 0), -0.5 * Q(0, 1), -0.5 * Q(0, 2)  //
+                    });
+
+                    auto eigen_decomposition = Eigen34::EigenDecompose3x3(Qp.DataPtr());
+                    std::vector<double> eigenvalues = eigen_decomposition.first;
+                    std::vector<std::vector<double>> eigenvectors = eigen_decomposition.second;
+                    double min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    if (eigenvalues.empty())
+                    {
+                        std::cerr << " NO EIGENVALUES!!!!!!!  NO EIGENVALUES!!!!!!! NO EIGENVALUES!!!!!!! \n";
+                        exit(-1);
+                    }
+                    // Find the suitable eigenvalue-eigenvector
+                    min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    for (size_t i = 0; i < eigenvalues.size(); i++)
+                    {
+                        mini::Vector<double, 3> b({eigenvectors[i][0], eigenvectors[i][1], eigenvectors[i][2]});
+                        // std::cout << " b for d = " << d << std::endl
+                        //           << ": " << b << std::endl;
+                        b = (1 / mini::Norm2(b)) * b;
+                        const double Delta = b[1] * b[1] - 4 * b[2] * b[0];
+                        // std::cout << " Delta " << Delta << std::endl;
+
+                        if (Delta < 0 || eigenvalues.size() == 1)
+                        {
+                            const double error = Dotp(b, C_hat * b);
+                            if (min_error > error)
+                            {
+                                min_error = error;
+                                denominators_[d] = b;
+                            }
+                        }
+                    }
+
+                    // Store solutions
+                    numerators_[d] = F * denominators_[d];
+                    if (eigenvalues.size() == 1)
+                    {
+                        std::cout << " numerator = " << F * denominators_[d] << std::endl;
+                        std::cout << " denominaor = " << F * denominators_[d] << std::endl;
+                    }
+                }
+                else if (fixed_point_indexes.size() == 4)
+                {
+                    // Fill constraint matrices E and D
+                    mini::Matrix<double, 4, 3> D;
+                    mini::Matrix<double, 4, 3> E;
+                    for (size_t r = 0; r < fixed_point_indexes.size(); r++)
+                    {
+                        const size_t index = fixed_point_indexes[r];
+                        const double dt = (time_instances[index] - time_base_) * scale_;
+                        const double y = data[index][d];
+                        E(r, 0) = y * (D(r, 0) = 1);
+                        E(r, 1) = y * (D(r, 1) = dt);
+                        E(r, 2) = y * (D(r, 2) = dt * dt);
+                    }
+
+                    mini::Matrix<double, 3, 3> H = mini::Matrix<double, 3, 3>::eye();
+
+                    // Compute F
+                    mini::Matrix<double, 3, 3> HtDtDH = H.t() * D.t() * D * H;
+                    mini::Matrix<double, 3, 3> HtDtDHinv;
+                    InvertSPD3x3(HtDtDH, HtDtDHinv);
+                    mini::Matrix<double, 3, 3> F = HtDtDHinv * (D * H).t() * E;
+
+                    // No A, B hats this time...
+                    mini::Matrix<double, 3, 3> C_hat = (H * F).t() * As[d] * H * F + Cs[d] - 2 * (H * F).t() * Bs[d];
+
+                    // Get the symmetric part of C_hat to be n the safe side
+                    C_hat = 0.5 * (C_hat + C_hat.t());
+
+                    // Finally, the eigenvector matrix, Q
+                    mini::Matrix<double, 3, 3> Q = C_hat;
+
+                    // The Qp = inv(K)*Q
+                    // Qp = inv(K)*(symmetric(C_hat) - B_hat*
+                    mini::Matrix<double, 3, 3> Qp({
+                        //
+                        -0.5 * Q(2, 0), -0.5 * Q(2, 1), -0.5 * Q(2, 2), //
+                        Q(1, 0), Q(1, 1), Q(1, 2),                      //
+                        -0.5 * Q(0, 0), -0.5 * Q(0, 1), -0.5 * Q(0, 2)  //
+                    });
+
+                    auto eigen_decomposition = Eigen34::EigenDecompose3x3(Qp.DataPtr());
+                    std::vector<double> eigenvalues = eigen_decomposition.first;
+                    std::vector<std::vector<double>> eigenvectors = eigen_decomposition.second;
+                    double min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    if (eigenvalues.empty())
+                    {
+                        std::cerr << " NO EIGENVALUES!!!!!!!  NO EIGENVALUES!!!!!!! NO EIGENVALUES!!!!!!! \n";
+                        exit(-1);
+                    }
+                    // Find the suitable eigenvalue-eigenvector
+                    min_error = std::numeric_limits<double>::max(); // probably not necessary
+                    for (size_t i = 0; i < eigenvalues.size(); i++)
+                    {
+                        mini::Vector<double, 3> b({eigenvectors[i][0], eigenvectors[i][1], eigenvectors[i][2]});
+                        // std::cout << " b for d = " << d << std::endl
+                        //           << ": " << b << std::endl;
+                        b = (1 / mini::Norm2(b)) * b;
+                        const double Delta = b[1] * b[1] - 4 * b[2] * b[0];
+                        // std::cout << " Delta " << Delta << std::endl;
+
+                        if (Delta < 0 || eigenvalues.size() == 1)
+                        {
+                            const double error = Dotp(b, C_hat * b);
+                            if (min_error > error)
+                            {
+                                min_error = error;
+                                denominators_[d] = b;
+                            }
+                        }
+                    }
+
+                    // Store solutions
+                    numerators_[d] = F * denominators_[d];
+                    if (eigenvalues.size() == 1)
+                    {
+                        std::cout << " numerator = " << F * denominators_[d] << std::endl;
+                        std::cout << " denominaor = " << F * denominators_[d] << std::endl;
+                    }
                 }
             }
         }

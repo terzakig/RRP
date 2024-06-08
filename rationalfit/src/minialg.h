@@ -104,7 +104,7 @@ namespace minialg
         //@brief Get row as vector (cols x 1)
         inline Matrix<P, cols, 1> GetRow(const size_t &r) const
         {
-            Matrix<P, rows, 1> row;
+            Matrix<P, cols, 1> row;
             for (size_t c = 0; c < cols; c++)
             {
                 row[c] = mat_[r * cols + c];

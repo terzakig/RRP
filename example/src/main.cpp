@@ -38,7 +38,7 @@ int main()
     ratfit::RationalFitter<2> rat_regression_interp(                                                              //
         std::vector<double>{angles[0], angles[1], angles[2], angles[3], angles[4], angles[5]},                    //
         std::vector<mini::Vector<double, 2>>({points[0], points[1], points[2], points[3], points[4], points[5]}), //
-        std::vector<size_t>({0, 4, 5}),                                                                           // no indexes fixed
+        std::vector<size_t>({0, 1, 2, 3}),                                                                        // no indexes fixed
         std::vector<double>({1, 1, 1, 1, 1, 1}));
 
     std::cout << "REGRESSION WITH FIXED POINTS\n=======================\n";
