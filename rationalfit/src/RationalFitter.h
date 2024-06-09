@@ -28,6 +28,7 @@ namespace ratfit
     {
 
     public:
+        //! Use to imporse interpolation (@TODO: fix buggy path with complex algebra)
         static constexpr double LARGE_WEIGHT = 1000.0;
 
         template <typename Pt, typename Pd, typename Pw = double>
@@ -41,20 +42,32 @@ namespace ratfit
                 data.size() > 4 &&                                                          //
                 time_instances.size() == data.size() &&                                     //
                 ((!weights.empty() && weights.size() == data.size()) || weights.empty()) && //
-                fixed_point_indexes.size() < 4);
+                fixed_point_indexes.size() < 5);
 
             // Check what optimization to run (with/without fixed points)
-            if (fixed_point_indexes.empty())
+            if (!fixed_point_indexes.empty())
             {
+                std::vector<Pw> new_weights = weights;
+                for (const auto &index : fixed_point_indexes)
+                {
+                    new_weights[index] = LARGE_WEIGHT;
+                }
 
-                InitSimpleRegression(time_instances, data, weights);
+                InitSimpleRegression(time_instances, data, new_weights);
+                return;
             }
+            InitSimpleRegression(time_instances, data, weights);
+
+            /*
+            // @TODO: Fix buggy code with extermely complex expressions
             else
             {
                 InitRegressionWithFixedPoints(time_instances, data, fixed_point_indexes, weights);
             }
+            */
         }
 
+        /*
         template <typename Pt, typename Pd, typename Pw = double>
         void InitRegressionWithFixedPoints(                      //
             const std::vector<Pt> &time_instances,               //
@@ -465,6 +478,7 @@ namespace ratfit
                 }
             }
         }
+        */
 
         // @brief Initialize polynomials for simple regression
         template <typename Pt, typename Pd, typename Pw>

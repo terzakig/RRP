@@ -32,7 +32,7 @@ namespace Eigen34
   /// <param name="std::vector<P> flat_mat"> is the coefficient matrix in flat form</param>
   /// <returns>std::vector<P> solutions </returns>
   template <typename P>
-  std::vector<P> GaussJordan3x3(const std::vector<P>& flat_mat)
+  std::vector<P> GaussJordan3x3(const std::vector<P> &flat_mat)
   {
     // For the first step of the Gauss-Jordan Pivoting, we need the max of the coefficient from list0Pivot
     //
@@ -320,7 +320,7 @@ namespace Eigen34
   ///
   ///
   template <typename P>
-  std::vector<P> GaussJordanFirstStep(const std::vector<P>& flat_mat, const int row, const int col)
+  std::vector<P> GaussJordanFirstStep(const std::vector<P> &flat_mat, const int row, const int col)
   {
     std::vector<P> result;
     result.reserve(9); // 16-2*4+1
@@ -349,7 +349,7 @@ namespace Eigen34
   /// The input vector is a flat version of the 4x4 matrix
   ///
   template <typename P>
-  std::vector<P> GaussJordan4x4(const std::vector<P>& flat_mat)
+  std::vector<P> GaussJordan4x4(const std::vector<P> &flat_mat)
   {
     // Working out the index of the max coefficient (absolute value).
     auto absmax1it = std::max_element(flat_mat.begin(),
@@ -527,7 +527,7 @@ namespace Eigen34
 
   // sorting networks for sorting small vectors in ascending order
   template <typename P>
-  inline static void swap_(P& a, P& b)
+  inline static void swap_(P &a, P &b)
   {
     P temp = a;
     a = b;
@@ -536,53 +536,62 @@ namespace Eigen34
 
   // sort a vector of size two with the network [[0 1]]
   template <typename P>
-  inline static void sortnet2(std::vector<P>& vec)
+  inline static void sortnet2(std::vector<P> &vec)
   {
-    if (vec[0] > vec[1]) swap_(vec[0], vec[1]);
+    if (vec[0] > vec[1])
+      swap_(vec[0], vec[1]);
   }
 
   // sort a vector of size three with the network [[0 1][0 2][1 2]]
   template <typename P>
-  inline static void sortnet3(std::vector<P>& vec)
+  inline static void sortnet3(std::vector<P> &vec)
   {
-    if (vec[0] > vec[1]) swap_(vec[0], vec[1]);
-    if (vec[0] > vec[2]) swap_(vec[0], vec[2]);
-    if (vec[1] > vec[2]) swap_(vec[1], vec[2]);
+    if (vec[0] > vec[1])
+      swap_(vec[0], vec[1]);
+    if (vec[0] > vec[2])
+      swap_(vec[0], vec[2]);
+    if (vec[1] > vec[2])
+      swap_(vec[1], vec[2]);
   }
 
   // sort a vector of size four with the network [[0 1][2 3][0 2][1 3][1 2]]
   template <typename P>
-  inline static void sortnet4(std::vector<P>& vec)
+  inline static void sortnet4(std::vector<P> &vec)
   {
-    if (vec[0] > vec[1]) swap_(vec[0], vec[1]);
-    if (vec[2] > vec[3]) swap_(vec[2], vec[3]);
-    if (vec[0] > vec[2]) swap_(vec[0], vec[2]);
-    if (vec[1] > vec[3]) swap_(vec[1], vec[3]);
-    if (vec[1] > vec[2]) swap_(vec[1], vec[2]);
+    if (vec[0] > vec[1])
+      swap_(vec[0], vec[1]);
+    if (vec[2] > vec[3])
+      swap_(vec[2], vec[3]);
+    if (vec[0] > vec[2])
+      swap_(vec[0], vec[2]);
+    if (vec[1] > vec[3])
+      swap_(vec[1], vec[3]);
+    if (vec[1] > vec[2])
+      swap_(vec[1], vec[2]);
   }
 
   // sort a vector of size up to four with the appropriate network
   template <typename P>
-  inline static void sortnet(std::vector<P>& vec)
+  inline static void sortnet(std::vector<P> &vec)
   {
     switch (vec.size())
     {
-      case 0:
-      case 1:
-	      // nothing to do
-	      return;
-      case 2:
-	      sortnet2(vec);
-	      return;
-      case 3:
-	      sortnet3(vec);
-	      return;
-      case 4:
-	      sortnet4(vec);
-	      return;
-      default:
-	      std::cout << "Internal error in Eigen34::sortnet(), got " << vec.size() << "!\n";
-	      exit(1);
+    case 0:
+    case 1:
+      // nothing to do
+      return;
+    case 2:
+      sortnet2(vec);
+      return;
+    case 3:
+      sortnet3(vec);
+      return;
+    case 4:
+      sortnet4(vec);
+      return;
+    default:
+      std::cout << "Internal error in Eigen34::sortnet(), got " << vec.size() << "!\n";
+      exit(1);
     }
   }
 
@@ -643,7 +652,7 @@ namespace Eigen34
     std::vector<P> solution = PolySolvers::SolveQuartic(A4, A3, A2, A1, A0);
 
     // Put the solutions in ascending order
-    //std::sort(solution.begin(), solution.end());
+    // std::sort(solution.begin(), solution.end());
     sortnet(solution);
 
     return solution;
@@ -675,13 +684,85 @@ namespace Eigen34
 
     std::vector<P> solution = PolySolvers::SolveCubic(coef1, coef2, coef3, coef4);
 
-    //std::sort(solution.begin(), solution.end());
+    // std::sort(solution.begin(), solution.end());
     sortnet(solution);
 
     // for (int i = 0; i < solution.size(); i++)
     //   std::cout << "eigenvalue "<<i<<" : " << solution[i] << std::endl;
 
     return solution;
+  }
+
+  ///
+  /// Return the list of the eigenvalues of a 2x2 matrix.
+  /// Argument is a 1D array representing the 2x2 matrix
+  ///
+  template <typename P>
+  std::vector<P> EigenValues2x2(const P *array)
+  {
+
+    const P a11 = array[0], a12 = array[1], a21 = array[2], a22 = array[3];
+
+    P a = 1;
+    P b = -(a11 - a22);
+    P c = a11 * a22 - a12 * a21;
+
+    std::vector<P> solution = PolySolvers::SolveQuadratic(a, b, c);
+
+    // std::sort(solution.begin(), solution.end());
+    sortnet(solution);
+
+    return solution;
+  }
+
+  //@brief 2x2 Matrix eigen decomposition
+  template <typename P>
+  std::pair<std::vector<P>, std::vector<std::vector<P>>> EigenDecompose2x2(const P *M)
+  {
+    // First obtain the eigenvalues of M in acsending order
+    auto eigenvalues = EigenValues2x2(M);
+    // vector of eigenvectors
+    std::vector<std::vector<P>> eigenvectors;
+    // return an empty eigenvalue list and a single eigenvector with zeros in it
+    if (eigenvalues.size() == 0)
+      return std::pair<std::vector<P>, std::vector<std::vector<P>>>(eigenvalues, eigenvectors);
+
+    std::vector<P> A( //
+        {M[0], M[1],  //
+         M[2], M[3]});
+
+    eigenvectors.reserve(2);
+    for (size_t i = 0; i < eigenvalues.size(); i++)
+    {
+      // Now subtract the eigenvalue from the diagonal
+      A[0] -= eigenvalues[i];
+      A[3] -= eigenvalues[i];
+
+      // Now, it's easy to compute and add the eigen vector to the list
+      // We pick the row of A that has the greatest norm for numerical stability
+      double alpha, beta;
+      if (A[0] * A[0] + A[1] * A[1] > A[2] * A[2] + A[3] * A[3])
+      {
+        alpha = -A[1];
+        beta = A[0];
+      }
+      else
+      {
+        alpha = -A[3];
+        beta = A[2];
+      }
+      const P inv_l2_norm = static_cast<P>(1.0 / sqrt(alpha * alpha + beta * beta));
+      alpha *= inv_l2_norm;
+      beta *= inv_l2_norm;
+      eigenvectors.emplace_back(std::vector<P>({alpha, beta}));
+
+      // add the eigenvalue back to the diagonal in order to undo the change in the elements of A
+      A[0] += eigenvalues[i];
+      A[3] += eigenvalues[i];
+    }
+
+    // return the decomposition (in ascending eigenvalue order)
+    return std::pair<std::vector<P>, std::vector<std::vector<P>>>(eigenvalues, eigenvectors);
   }
 
   // Get the eigenvector of the largest eigenvalue of a 3x3 matrix.

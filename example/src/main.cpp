@@ -1,7 +1,6 @@
 #include <iostream>
 #include <RationalFitter.h>
 
-using namespace minialg;
 int main()
 {
     // Generate 2D  data
@@ -13,7 +12,7 @@ int main()
     {
         const double theta = i * Dtheta;
         angles.push_back(theta);
-        points.emplace_back(std::array<double, 2>{10 * exp(-theta * 0.5) * cos(theta), 5 * sin(theta)});
+        points.emplace_back(std::array<double, 2>{cos(theta), sin(theta)});
     }
 
     // A. Test pure regression
@@ -21,7 +20,7 @@ int main()
         std::vector<double>{angles[0], angles[1], angles[2], angles[3], angles[4], angles[5]},                    //
         std::vector<mini::Vector<double, 2>>({points[0], points[1], points[2], points[3], points[4], points[5]}), //
         std::vector<size_t>(),                                                                                    // no indexes fixed
-        std::vector<double>({1, 1, 1, 1, 1, 1}));
+        std::vector<double>());
 
     std::cout << "REGRESSION\n=======================\n";
     for (size_t i = 0; i < 6; i++)
@@ -38,7 +37,7 @@ int main()
     ratfit::RationalFitter<2> rat_regression_interp(                                                              //
         std::vector<double>{angles[0], angles[1], angles[2], angles[3], angles[4], angles[5]},                    //
         std::vector<mini::Vector<double, 2>>({points[0], points[1], points[2], points[3], points[4], points[5]}), //
-        std::vector<size_t>({0, 1, 2, 3}),                                                                        // no indexes fixed
+        std::vector<size_t>({1, 2}),                                                                              // no indexes fixed
         std::vector<double>({1, 1, 1, 1, 1, 1}));
 
     std::cout << "REGRESSION WITH FIXED POINTS\n=======================\n";
