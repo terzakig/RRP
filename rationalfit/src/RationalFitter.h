@@ -60,10 +60,6 @@ namespace ratfit
 
             /*
             // @TODO: Fix buggy code with extermely complex expressions
-            else
-            {
-                InitRegressionWithFixedPoints(time_instances, data, fixed_point_indexes, weights);
-            }
             */
         }
 
