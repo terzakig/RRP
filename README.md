@@ -36,7 +36,7 @@ If you use this code in your published work, please cite the following [paper](h
   title={Efficient Pose Prediction with Rational Regression Applied to {vSLAM}},
   author={George Terzakis and Manolis Lourakis},
   booktitle={International Conference on Robotics and Automation (ICRA)},
-  pages={},
+  pages={11970--11976},
   year={2024},
   publisher={IEEE}
 }
